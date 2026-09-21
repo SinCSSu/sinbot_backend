@@ -1,6 +1,6 @@
 package top.sincs.sinbot.exception;
 
-import top.sincs.sinbot.common.ErrorCode;
+import top.sincs.sinbot.constant.ErrorCode;
 
 /**
  * 业务异常。

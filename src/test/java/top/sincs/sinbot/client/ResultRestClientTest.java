@@ -7,7 +7,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
-import top.sincs.sinbot.common.ErrorCode;
+import top.sincs.sinbot.constant.ErrorCode;
 import top.sincs.sinbot.exception.BusinessException;
 
 import java.util.List;

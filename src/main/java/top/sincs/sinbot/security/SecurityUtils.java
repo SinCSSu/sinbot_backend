@@ -2,7 +2,7 @@ package top.sincs.sinbot.security;
 
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import top.sincs.sinbot.common.ErrorCode;
+import top.sincs.sinbot.constant.ErrorCode;
 import top.sincs.sinbot.exception.BusinessException;
 
 /**

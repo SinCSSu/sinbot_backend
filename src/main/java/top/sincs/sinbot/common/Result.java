@@ -2,6 +2,7 @@ package top.sincs.sinbot.common;
 
 import lombok.Data;
 import lombok.experimental.Accessors;
+import top.sincs.sinbot.constant.ErrorCode;
 
 import java.io.Serializable;
 

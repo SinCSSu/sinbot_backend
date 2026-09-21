@@ -1,4 +1,4 @@
-package top.sincs.sinbot.common;
+package top.sincs.sinbot.constant;
 
 import lombok.Getter;
 
@@ -34,6 +34,8 @@ public enum ErrorCode {
     BIZ_ERROR(20000, "业务处理失败"),
     DATA_NOT_FOUND(20001, "数据不存在"),
     DATA_ALREADY_EXISTS(20002, "数据已存在"),
+    TEAM_INFO_NOT_EXISTS(20003,"团队不存在"),
+    TEAM_ID_FORMAT_ERROR(20004,"团队ID格式错误"),
 
     /* ---------------- 系统错误 50xxx ---------------- */
     SYSTEM_ERROR(50000, "系统繁忙，请稍后重试"),

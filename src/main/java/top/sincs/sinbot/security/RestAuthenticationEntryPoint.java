@@ -6,7 +6,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.stereotype.Component;
-import top.sincs.sinbot.common.ErrorCode;
+import top.sincs.sinbot.constant.ErrorCode;
 import top.sincs.sinbot.common.Result;
 import tools.jackson.databind.ObjectMapper;
 

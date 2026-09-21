@@ -5,7 +5,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.stereotype.Component;
-import top.sincs.sinbot.common.ErrorCode;
+import top.sincs.sinbot.constant.ErrorCode;
 
 import java.io.IOException;
 
