@@ -36,6 +36,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
+            RobotAuthenticationFilter robotAuthenticationFilter,
             TokenAuthenticationFilter tokenAuthenticationFilter,
             RestAuthenticationEntryPoint restAuthenticationEntryPoint,
             RestAccessDeniedHandler restAccessDeniedHandler) throws Exception {
@@ -71,7 +72,8 @@ public class SecurityConfig {
                         .requestMatchers("/druid/**", "/error", "/actuator/health").permitAll()
                         .anyRequest().authenticated())
 
-                // 认证过滤器插在用户名密码认证过滤器之前
+                // 两条认证通道：先认机器人的 X-Api-Key，未命中才落到 Bearer token（DR-03）
+                .addFilterBefore(robotAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(tokenAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
 
                 // 401 / 403 统一输出响应壳

@@ -38,6 +38,11 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
                          HttpServletResponse response,
                          AuthenticationException authException) throws IOException {
         // 携带了凭证但已失效（过期 / 已登出 / 被踢下线）时，给出更精确的错误码
+        Object invalidRobotKey = request.getAttribute(RobotAuthenticationFilter.ATTR_INVALID_ROBOT_KEY);
+        if (invalidRobotKey != null) {
+            writeResult(response, ErrorCode.ROBOT_API_KEY_INVALID);
+            return;
+        }
         Object invalid = request.getAttribute(TokenAuthenticationFilter.ATTR_INVALID_TOKEN);
         writeResult(response, invalid != null ? ErrorCode.TOKEN_INVALID : ErrorCode.UNAUTHORIZED);
     }
