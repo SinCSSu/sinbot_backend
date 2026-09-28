@@ -40,21 +40,23 @@ public class NacosConfigRefresher implements ApplicationRunner, DisposableBean {
             log.info("Nacos 配置变更监听已关闭（nacos.config.refresh-enabled=false）");
             return;
         }
-        String name = NacosConfigLoader.PROPERTY_SOURCE_PREFIX + properties.getDataId();
         try {
             configService = NacosConfigLoader.createConfigService(properties);
-            configService.addListener(properties.getDataId(), properties.getGroup(), new Listener() {
-                @Override
-                public Executor getExecutor() {
-                    return null;
-                }
+            for (String dataId : properties.getDataIds()) {
+                String name = NacosConfigLoader.PROPERTY_SOURCE_PREFIX + dataId;
+                configService.addListener(dataId, properties.getGroup(), new Listener() {
+                    @Override
+                    public Executor getExecutor() {
+                        return null;
+                    }
 
-                @Override
-                public void receiveConfigInfo(String configInfo) {
-                    refresh(name, configInfo);
-                }
-            });
-            log.info("已监听 Nacos 配置变更 [dataId={}, group={}]", properties.getDataId(), properties.getGroup());
+                    @Override
+                    public void receiveConfigInfo(String configInfo) {
+                        refresh(name, configInfo);
+                    }
+                });
+                log.info("已监听 Nacos 配置变更 [dataId={}, group={}]", dataId, properties.getGroup());
+            }
         } catch (Exception ex) {
             log.error("注册 Nacos 配置监听失败，配置变更不会自动生效: {}", ex.getMessage(), ex);
         }

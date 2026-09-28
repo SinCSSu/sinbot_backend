@@ -18,10 +18,13 @@ import org.springframework.util.StringUtils;
  * <p>顺序：必须排在 {@code ConfigDataEnvironmentPostProcessor} 之后，
  * 否则读不到 {@code nacos.config.*} 引导参数。</p>
  *
- * <p>优先级：Nacos 配置 {@code addFirst}，即高于本地 application.properties、
- * 环境变量与命令行参数——业务配置以 Nacos 为准。</p>
+ * <p>多配置项：按 {@code nacos.config.data-ids} 的声明顺序逐份加载并
+ * {@code addFirst}，因此<b>后声明的 Data ID 优先级更高</b>，可用于
+ * 「公共配置 + 应用私有配置」的分层覆盖。</p>
  *
- * <p>失败策略：Nacos 是配置的唯一来源，连不上、配置不存在或解析失败一律终止启动，
+ * <p>优先级：Nacos 配置整体高于本地 application.properties、环境变量与命令行参数。</p>
+ *
+ * <p>失败策略：Nacos 是配置的唯一来源，任一份配置连不上、不存在或解析失败都终止启动，
  * 不回退本地配置，避免实例带着过期 / 错误的配置对外提供服务。</p>
  */
 public class NacosConfigEnvironmentPostProcessor implements EnvironmentPostProcessor, Ordered {
@@ -43,24 +46,30 @@ public class NacosConfigEnvironmentPostProcessor implements EnvironmentPostProce
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
         NacosConfigProperties properties = NacosConfigProperties.from(environment);
-        String name = NacosConfigLoader.PROPERTY_SOURCE_PREFIX + properties.getDataId();
-        try {
-            PropertySource<?> source = fetchFromNacos(properties, name);
-            environment.getPropertySources().addFirst(source);
-            log.info("已加载配置源 [" + name + "]，来源=Nacos(" + properties.getServerAddr()
-                    + ")，配置项 " + countOf(source) + " 个");
-        } catch (Exception ex) {
-            throw new IllegalStateException(
-                    "从 Nacos 加载配置失败，启动中止 [dataId=" + properties.getDataId()
-                            + ", group=" + properties.getGroup()
-                            + ", serverAddr=" + properties.getServerAddr() + "]", ex);
+        for (String dataId : properties.getDataIds()) {
+            String name = NacosConfigLoader.PROPERTY_SOURCE_PREFIX + dataId;
+            try {
+                PropertySource<?> source = fetchFromNacos(properties, dataId, name);
+                // addFirst：后加载的 Data ID 排在更前面，即后声明者优先
+                environment.getPropertySources().addFirst(source);
+                log.info("已加载配置源 [" + name + "]，来源=Nacos(" + properties.getServerAddr()
+                        + ")，配置项 " + countOf(source) + " 个");
+            } catch (Exception ex) {
+                throw new IllegalStateException(
+                        "从 Nacos 加载配置失败，启动中止 [dataId=" + dataId
+                                + ", group=" + properties.getGroup()
+                                + ", serverAddr=" + properties.getServerAddr()
+                                + "]，原因：" + ex.getMessage()
+                                + "（若服务端开启鉴权，请配置 nacos.config.username / password）", ex);
+            }
         }
     }
 
-    private PropertySource<?> fetchFromNacos(NacosConfigProperties properties, String name) throws Exception {
+    private PropertySource<?> fetchFromNacos(NacosConfigProperties properties, String dataId, String name)
+            throws Exception {
         ConfigService configService = NacosConfigLoader.createConfigService(properties);
         try {
-            String content = configService.getConfig(properties.getDataId(), properties.getGroup(), properties.getTimeout());
+            String content = configService.getConfig(dataId, properties.getGroup(), properties.getTimeout());
             if (!StringUtils.hasText(content)) {
                 throw new IllegalStateException("Nacos 上配置不存在或内容为空");
             }
