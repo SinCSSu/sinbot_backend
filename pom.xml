@@ -30,6 +30,7 @@
         <java.version>21</java.version>
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
         <druid.version>1.2.28</druid.version>
+        <nacos.version>3.2.3</nacos.version>
     </properties>
     <dependencies>
         <dependency>
@@ -101,6 +102,25 @@
             <groupId>org.mapstruct</groupId>
             <artifactId>mapstruct</artifactId>
             <version>1.5.5.Final</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.alibaba.nacos</groupId>
+            <artifactId>nacos-client</artifactId>
+            <version>${nacos.version}</version>
+            <!-- 指定纯净版SDK -->
+            <classifier>pure</classifier>
+        </dependency>
+        <!-- 使用纯净版时必须要引入同版本nacos-api和nacos-common，否则可能出现运行时找不到类的问题 -->
+        <dependency>
+            <groupId>com.alibaba.nacos</groupId>
+            <artifactId>nacos-common</artifactId>
+            <version>${nacos.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba.nacos</groupId>
+            <artifactId>nacos-api</artifactId>
+            <version>${nacos.version}</version>
         </dependency>
     </dependencies>
 

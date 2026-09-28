@@ -1,0 +1,9 @@
+openapi: 3.1.0
+info:
+  title: 创建团队
+  description: Title
+  version: 1.0.0
+servers:
+  - url: 'team/createTeam'
+paths:
+  
