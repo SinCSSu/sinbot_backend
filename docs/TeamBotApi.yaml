@@ -1,0 +1,151 @@
+openapi: 3.1.0
+info:
+  title: 团队OpenAPI-机器人侧
+  description: 提供给机器人侧使用的api
+  version: 1.0.0
+servers:
+  - url: http://localhost:18080
+    description: 通用环境
+paths:
+  /team/createTeam:
+    post:
+      tags: [ team ]
+      summary: 创建团队
+      operationId: createTeam
+      parameters:
+        - $ref: '#/components/parameters/groupNumber'
+        - $ref: '#/components/parameters/operator'
+      security:
+        - apiKeyAuth: [ ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTeamRequest'
+      responses:
+        '200':
+          description: 服务器正常返回
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TeamInfoVo'
+
+
+
+
+
+
+components:
+  parameters:
+    groupNumber:
+      name: X-Group-Number
+      in: header
+      required: true
+      description: 来源qq群号
+      schema:
+        type: string
+        pattern: '^-?\d+$'
+    operator:
+      name: X-Operator-Qq
+      in: header
+      required: true
+      description: 发送指令的人的qq号
+      schema:
+        type: string
+        pattern: '^-?\d+$'
+  securitySchemes:
+    apiKeyAuth:
+      name: X-API-Key
+      type: apiKey
+      in: header
+  schemas:
+    ApiResponse:
+      type: object
+      required: [ code ]
+      properties:
+        code:
+          type: integer
+          description: 业务状态码，0 表示成功
+          example: 0
+        message:
+          type: string
+          description: 提示信息
+          example: ok
+        data:
+          description: 业务数据，具体结构由各接口决定
+          nullable: true
+    ErrorResponse:
+      type: object
+      required: [ code, message ]
+      properties:
+        code:
+          type: integer
+          example: 40001
+        message:
+          type: string
+          example: 参数错误
+        data:
+          type: "null"
+
+    #----------------------请求体-------------------------
+
+    CreateTeamRequest:
+      type: object
+      required: [ team_name,dungeon,start_time ]
+      properties:
+        team_name:
+          type: string
+        dungeon:
+          type: string
+        comment:
+          type: string
+        start_time:
+          type: string
+          format: time
+          example: "2026-09-29 09:00:00"
+        limit_method:
+          type: string
+          pattern: '^-?\d+$'
+
+    #----------------------响应体-------------------------
+
+    TeamInfoVo:
+      type: object
+      properties:
+        team_id:
+          type: string
+          pattern: '^-?\d+$'
+        team_name:
+          type: string
+        group_number:
+          type: string
+          pattern: '^-?\d+$'
+        dungeon:
+          type: string
+        comment:
+          type: string
+        start_time:
+          type: string
+          format: time
+          example: "2026-09-29 09:00:00"
+        overtime_time:
+          type: string
+          format: time
+          example: "2026-09-29 09:00:00"
+        limit_method:
+          type: string
+          pattern: '^-?\d+$'
+        locker:
+          type: string
+        salary:
+          type: string
+          pattern: '^-?\d+$'
+        createdBy:
+          type: string
+          pattern: '^-?\d+$'
