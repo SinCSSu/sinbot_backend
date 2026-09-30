@@ -53,6 +53,7 @@ jobs:
           STS_RESP=$(curl -sS -X POST "https://sts.tencentcloudapi.com/" \
           --data-urlencode "Action=AssumeRoleWithWebIdentity" \
           --data-urlencode "Version=2018-08-13" \
+          --data-urlencode "Region=$TENCENTCLOUD_REGION" \
           --data-urlencode "Timestamp=$(date -u +%s)" \
           --data-urlencode "Nonce=$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')" \
           --data-urlencode "RoleArn=$ROLE_ARN" \
