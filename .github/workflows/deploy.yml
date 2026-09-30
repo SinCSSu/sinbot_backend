@@ -60,11 +60,14 @@ jobs:
           echo "$payload" > /tmp/sts.json
           
           STS_RESP=$(curl -sS -X POST "https://sts.tencentcloudapi.com/" \
-            -H "Content-Type: application/json" \
-            -H "X-TC-Action: AssumeRoleWithWebIdentity" \
-            -H "X-TC-Version: 2018-08-13" \
-            -H "X-TC-Region: $TENCENTCLOUD_REGION" \
-            --data-binary @/tmp/sts.json)
+          --data-urlencode "Action=AssumeRoleWithWebIdentity" \
+          --data-urlencode "Version=2018-08-13" \
+          --data-urlencode "Region=$TENCENTCLOUD_REGION" \
+          --data-urlencode "RoleArn=$ROLE_ARN" \
+          --data-urlencode "WebIdentityToken=$ID_TOKEN" \
+          --data-urlencode "ProviderId=$OIDC_PROVIDER_ID" \
+          --data-urlencode "RoleSessionName=gh-${{ github.run_id }}" \
+          --data-urlencode "DurationSeconds=3600")
 
           if echo "$STS_RESP" | jq -e '.Response.Error' >/dev/null; then
             echo "$STS_RESP" | jq .
