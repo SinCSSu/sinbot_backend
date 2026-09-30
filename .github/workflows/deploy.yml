@@ -121,7 +121,7 @@ jobs:
               f.write(f"url={url}\n")
           PY
 
-      - name: 通过 RunCommand 部署
+      - name: 通过 TAT RunCommand 部署
         shell: bash
         env:
           PRESIGNED_URL: ${{ steps.cos.outputs.url }}
@@ -135,9 +135,38 @@ jobs:
           mv ${APP_NAME}.new ${APP_NAME}
           if [ -x ${DEPLOY_SCRIPT} ]; then bash ${DEPLOY_SCRIPT}; fi"
 
-          tccli lighthouse RunCommand \
+          CMD_CONTENT=$(printf '%s' "$REMOTE_CMD" | base64 -w0)
+
+          INVOCATION_ID=$(tccli tat RunCommand \
             --region "$TENCENTCLOUD_REGION" \
             --InstanceIds "[\"$LIGHTHOUSE_INSTANCE_ID\"]" \
-            --Command "$REMOTE_CMD" \
+            --Content "$CMD_CONTENT" \
             --WorkingDirectory "/root" \
-            --Timeout 300
+            --Timeout 300 \
+            | jq -r '.InvocationId')
+
+          echo "InvocationId: $INVOCATION_ID"
+
+          for i in $(seq 1 60); do
+            RESP=$(tccli tat DescribeInvocationTasks \
+              --region "$TENCENTCLOUD_REGION" \
+              --InvocationIds "[\"$INVOCATION_ID\"]")
+            STATUS=$(echo "$RESP" | jq -r '.InvocationTaskSet[0].TaskStatus')
+            echo "第 $i 次查询，状态: $STATUS"
+            case "$STATUS" in
+              SUCCESS)
+                echo "部署成功"
+                exit 0
+                ;;
+              FAILED|TIMEOUT|PARTIAL_FAILED)
+                echo "$RESP" | jq .
+                tccli tat DescribeInvocationTasks \
+                  --region "$TENCENTCLOUD_REGION" \
+                  --InvocationIds "[\"$INVOCATION_ID\"]" \
+                  --HideOutput false | jq .
+                exit 1
+                ;;
+            esac
+            sleep 5
+          done
+          echo "等待超时"; exit 1
