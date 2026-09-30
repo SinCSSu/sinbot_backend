@@ -2,7 +2,7 @@ name: Build and Deploy to Lighthouse
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
 
 permissions:
   id-token: write
@@ -18,7 +18,7 @@ jobs:
       OIDC_PROVIDER_ID: ${{ secrets.TENCENTCLOUD_OIDC_PROVIDER_ID }}
       LIGHTHOUSE_INSTANCE_ID: ${{ secrets.LIGHTHOUSE_INSTANCE_ID }}
       COS_BUCKET: ${{ secrets.COS_BUCKET }}
-      APP_DIR: /opt/sinbot/backend/releases/
+      APP_DIR: /opt/sinbot/backend/releases
       APP_NAME: sinbot_backend.jar
       DEPLOY_SCRIPT: /opt/sinbot/backend/deploy.sh
 
@@ -82,66 +82,55 @@ jobs:
         run: |
           set -euo pipefail
 
-          # 选出可执行 jar（排除 .original）
           JAR=$(find target -maxdepth 1 -name '*.jar' ! -name '*.original' | head -n 1)
           if [ -z "$JAR" ]; then
             echo "未找到可执行 jar"; exit 1
           fi
           echo "上传文件: $JAR"
 
-          # 通过 GITHUB_ENV 传给 Python
           echo "COS_KEY=deploy/app-${{ github.sha }}.jar" >> "$GITHUB_ENV"
           echo "JAR_PATH=$JAR" >> "$GITHUB_ENV"
 
-          # heredoc 必须顶格，不能用 <<'PY' 加缩进
           python - <<'PY'
-  import os
-  from qcloud_cos import CosConfig, CosS3Client
-  
-  client = CosS3Client(CosConfig(
-  Region=os.environ["TENCENTCLOUD_REGION"],
-  SecretId=os.environ["TENCENTCLOUD_SECRET_ID"],
-  SecretKey=os.environ["TENCENTCLOUD_SECRET_KEY"],
-  Token=os.environ["TENCENTCLOUD_TOKEN"],
-  ))
-  
-  bucket = os.environ["COS_BUCKET"]
-  key    = os.environ["COS_KEY"]
-  jar    = os.environ["JAR_PATH"]
-  
-  client.upload_file(Bucket=bucket, Key=key, LocalFilePath=jar)
-  print(f"已上传 cos://{bucket}/{key}")
-  
-  url = client.get_presigned_url(Method="GET", Bucket=bucket, Key=key, Expired=1800)
-with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-  f.write(f"url={url}\n")
-  PY
+          import os
+          from qcloud_cos import CosConfig, CosS3Client
 
-- name: 通过 RunCommand 部署
-  shell: bash
-  env:
-    PRESIGNED_URL: ${{ steps.cos.outputs.url }}
-  run: |
-    set -euo pipefail
-    
-    # 部署脚本：下载新 jar → 启新进程
-    read -r -d '' REMOTE_CMD <<EOF || true
-    set -e
-    mkdir -p "${APP_DIR}"
-    cd "${APP_DIR}"
-    
-    curl -fsSL -o "${APP_NAME}.new" "${PRESIGNED_URL}"
-    mv "${APP_NAME}.new" "${APP_NAME}"
-    
-    if [ -x "${DEPLOY_SCRIPT}" ]; then
-      bash "${DEPLOY_SCRIPT}"
-    fi
-    EOF
-    
-    # 直接传 JSON 数组，不用 --cli-unfold-argument
-    tccli lighthouse RunCommand \
-      --region "$TENCENTCLOUD_REGION" \
-      --InstanceIds "[\"$LIGHTHOUSE_INSTANCE_ID\"]" \
-      --Command "$REMOTE_CMD" \
-      --WorkingDirectory "/root" \
-      --Timeout 300
+          client = CosS3Client(CosConfig(
+              Region=os.environ["TENCENTCLOUD_REGION"],
+              SecretId=os.environ["TENCENTCLOUD_SECRET_ID"],
+              SecretKey=os.environ["TENCENTCLOUD_SECRET_KEY"],
+              Token=os.environ["TENCENTCLOUD_TOKEN"],
+          ))
+
+          bucket = os.environ["COS_BUCKET"]
+          key    = os.environ["COS_KEY"]
+          jar    = os.environ["JAR_PATH"]
+
+          client.upload_file(Bucket=bucket, Key=key, LocalFilePath=jar)
+          print(f"已上传 cos://{bucket}/{key}")
+
+          url = client.get_presigned_url(Method="GET", Bucket=bucket, Key=key, Expired=1800)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"url={url}\n")
+          PY
+
+      - name: 通过 RunCommand 部署
+        shell: bash
+        env:
+          PRESIGNED_URL: ${{ steps.cos.outputs.url }}
+        run: |
+          set -euo pipefail
+
+          REMOTE_CMD="set -e
+          mkdir -p ${APP_DIR}
+          cd ${APP_DIR}
+          curl -fsSL -o ${APP_NAME}.new '${PRESIGNED_URL}'
+          mv ${APP_NAME}.new ${APP_NAME}
+          if [ -x ${DEPLOY_SCRIPT} ]; then bash ${DEPLOY_SCRIPT}; fi"
+
+          tccli lighthouse RunCommand \
+            --region "$TENCENTCLOUD_REGION" \
+            --InstanceIds "[\"$LIGHTHOUSE_INSTANCE_ID\"]" \
+            --Command "$REMOTE_CMD" \
+            --WorkingDirectory "/root" \
+            --Timeout 300
