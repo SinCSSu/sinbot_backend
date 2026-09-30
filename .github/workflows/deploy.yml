@@ -139,35 +139,38 @@ jobs:
           CMD_CONTENT=$(printf '%s' "$REMOTE_CMD" | base64 -w0)
 
           INVOCATION_ID=$(tccli tat RunCommand \
-            --region "$TENCENTCLOUD_REGION" \
-            --InstanceIds "[\"$LIGHTHOUSE_INSTANCE_ID\"]" \
-            --Content "$CMD_CONTENT" \
-            --WorkingDirectory "/root" \
-            --Timeout 300 \
-            | jq -r '.InvocationId')
-
+          --region "$TENCENTCLOUD_REGION" \
+          --InstanceIds "[\"$LIGHTHOUSE_INSTANCE_ID\"]" \
+          --Content "$CMD_CONTENT" \
+          --WorkingDirectory "/root" \
+          --Timeout 300 \
+          | jq -r '.InvocationId')
+        
           echo "InvocationId: $INVOCATION_ID"
-
+          
           for i in $(seq 1 60); do
-            RESP=$(tccli tat DescribeInvocationTasks \
-              --region "$TENCENTCLOUD_REGION" \
-              --InvocationIds "[\"$INVOCATION_ID\"]")
-            STATUS=$(echo "$RESP" | jq -r '.InvocationTaskSet[0].TaskStatus')
-            echo "第 $i 次查询，状态: $STATUS"
-            case "$STATUS" in
-              SUCCESS)
-                echo "部署成功"
-                exit 0
-                ;;
-              FAILED|TIMEOUT|PARTIAL_FAILED)
-                echo "$RESP" | jq .
-                tccli tat DescribeInvocationTasks \
-                  --region "$TENCENTCLOUD_REGION" \
-                  --InvocationIds "[\"$INVOCATION_ID\"]" \
-                  --HideOutput false | jq .
-                exit 1
-                ;;
-            esac
-            sleep 5
+          RESP=$(tccli tat DescribeInvocations \
+          --region "$TENCENTCLOUD_REGION" \
+          --InvocationIds "[\"$INVOCATION_ID\"]")
+        
+          STATUS=$(echo "$RESP" | jq -r '.InvocationSet[0].InvocationStatus')
+          echo "第 $i 次查询，状态: $STATUS"
+        
+          case "$STATUS" in
+          SUCCESS)
+          echo "部署成功"
+          exit 0
+          ;;
+          FAILED|TIMEOUT|PARTIAL_FAILED)
+          echo "$RESP" | jq .
+          # 拿详情（含 stdout/stderr）
+          tccli tat DescribeInvocationTasks \
+          --region "$TENCENTCLOUD_REGION" \
+          --InvocationTaskIds "[\"$(echo "$RESP" | jq -r '.InvocationSet[0].InvocationTaskBasicInfoSet[0].InvocationTaskId')\"]" \
+          --HideOutput false | jq .
+          exit 1
+          ;;
+          esac
+          sleep 5
           done
           echo "等待超时"; exit 1
