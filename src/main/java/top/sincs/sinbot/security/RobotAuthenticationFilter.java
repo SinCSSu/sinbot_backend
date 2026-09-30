@@ -58,7 +58,9 @@ public class RobotAuthenticationFilter extends OncePerRequestFilter {
         }
 
         LoginUser robot = new LoginUser();
-        // DR-08：操作人不由调用方在 body 里自称，一律取自请求头
+        // DR-08：操作人不由调用方在 body 里自称，一律取自请求头。
+        // 头缺失时这里不拦——只读接口（按群查团队等）用不到操作人；写接口一律在 controller 层
+        // 由 SecurityUtils.requireOperatorQq() 拒绝，全仓只有这一个取值入口。
         robot.setUsername(request.getHeader(HeaderConstant.OPERATOR_QQ));
         robot.setNickname("robot");
         robot.setRoles(List.of(ROLE_ROBOT));

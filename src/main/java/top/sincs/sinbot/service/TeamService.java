@@ -10,8 +10,13 @@ import java.util.List;
 
 public interface TeamService {
 
-    /** 群号来自请求头 {@code X-Group-Number}，操作人来自当前身份（DR-04 / DR-08） */
-    TeamInfoVo createTeam(String groupNumber, CreateTeamDTO team);
+    /**
+     * 创建团队。
+     *
+     * <p>群号来自请求头 {@code X-Group-Number}（DR-04）；操作人由 controller 从当前身份取好后传入（DR-08），
+     * 机器人那条链路要求 {@code X-Operator-Qq} 必填。service 不再自行读身份上下文。</p>
+     */
+    TeamInfoVo createTeam(String groupNumber, String operatorQq, CreateTeamDTO team);
 
     void deleteTeam(Long teamId);
 
