@@ -1,57 +1,147 @@
-name: Deploy to Server
+name: Build and Deploy to Lighthouse
 
 on:
   push:
-    branches: [master]
-  workflow_dispatch:
-
-concurrency:
-  group: master-deploy-production
-  cancel-in-progress: false
+    branches: [ main ]
 
 permissions:
+  id-token: write
   contents: read
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
+    env:
+      TENCENTCLOUD_REGION: ${{ secrets.TENCENTCLOUD_REGION }}
+      ROLE_ARN: ${{ secrets.TENCENTCLOUD_ROLE_ARN }}
+      OIDC_PROVIDER_ID: ${{ secrets.TENCENTCLOUD_OIDC_PROVIDER_ID }}
+      LIGHTHOUSE_INSTANCE_ID: ${{ secrets.LIGHTHOUSE_INSTANCE_ID }}
+      COS_BUCKET: ${{ secrets.COS_BUCKET }}
+      APP_DIR: /opt/sinbot/backend/releases/
+      APP_NAME: sinbot_backend.jar
+      DEPLOY_SCRIPT: /opt/sinbot/backend/deploy.sh
+
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21
+      - name: Set up JDK
         uses: actions/setup-java@v4
         with:
+          distribution: temurin
           java-version: '21'
-          distribution: 'temurin'
-          cache: 'maven'
+          cache: maven
 
-      - name: Build with Maven
-        run: mvn clean package -Dmaven.test.skip=true -B
+      - name: Maven 打包
+        run: mvn -B clean package -DskipTests
 
-      - name: Verify JAR exists
-        run: ls -lh target/*.jar
+      - name: 获取腾讯云临时凭证（OIDC）
+        shell: bash
+        run: |
+          set -euo pipefail
 
-      - name: Upload JAR via SCP
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SERVER_PORT || 22 }}
-          source: "target/*.jar"
-          target: "/opt/sinbot/backend/releases/"
-          strip_components: 1
+          ID_TOKEN=$(curl -sS \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.tencentcloudapi.com" \
+            | jq -r '.value')
 
-      - name: Execute deploy script via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SERVER_PORT || 22 }}
-          script: |
-            cd /opt/sinbot/backend
-            chmod +x deploy.sh
-            ./deploy.sh
+          if [ -z "$ID_TOKEN" ] || [ "$ID_TOKEN" = "null" ]; then
+            echo "获取 GitHub OIDC token 失败"; exit 1
+          fi
+
+          payload=$(jq -n \
+            --arg role_arn "$ROLE_ARN" \
+            --arg token "$ID_TOKEN" \
+            --arg provider "$OIDC_PROVIDER_ID" \
+            --arg session "gh-${{ github.run_id }}" \
+            '{RoleArn:$role_arn,WebIdentityToken:$token,ProviderId:$provider,RoleSessionName:$session,DurationSeconds:3600}')
+
+          STS_RESP=$(curl -sS -X POST "https://sts.tencentcloudapi.com/" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            -H "X-TC-Action: AssumeRoleWithWebIdentity" \
+            -H "X-TC-Version: 2018-08-13" \
+            -H "X-TC-Region: $TENCENTCLOUD_REGION" \
+            -d "$payload")
+
+          if echo "$STS_RESP" | jq -e '.Response.Error' >/dev/null; then
+            echo "$STS_RESP" | jq .
+            exit 1
+          fi
+
+          echo "TENCENTCLOUD_SECRET_ID=$(echo "$STS_RESP" | jq -r '.Response.Credentials.TmpSecretId')" >> "$GITHUB_ENV"
+          echo "TENCENTCLOUD_SECRET_KEY=$(echo "$STS_RESP" | jq -r '.Response.Credentials.TmpSecretKey')" >> "$GITHUB_ENV"
+          echo "TENCENTCLOUD_TOKEN=$(echo "$STS_RESP" | jq -r '.Response.Credentials.Token')" >> "$GITHUB_ENV"
+
+      - name: 安装依赖
+        run: python -m pip install --upgrade tccli cos-python-sdk-v5
+
+      - name: 上传 jar 到 COS 并生成预签名 URL
+        id: cos
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # 选出可执行 jar（排除 .original）
+          JAR=$(find target -maxdepth 1 -name '*.jar' ! -name '*.original' | head -n 1)
+          if [ -z "$JAR" ]; then
+            echo "未找到可执行 jar"; exit 1
+          fi
+          echo "上传文件: $JAR"
+
+          # 通过 GITHUB_ENV 传给 Python
+          echo "COS_KEY=deploy/app-${{ github.sha }}.jar" >> "$GITHUB_ENV"
+          echo "JAR_PATH=$JAR" >> "$GITHUB_ENV"
+
+          # heredoc 必须顶格，不能用 <<'PY' 加缩进
+          python - <<'PY'
+  import os
+  from qcloud_cos import CosConfig, CosS3Client
+  
+  client = CosS3Client(CosConfig(
+  Region=os.environ["TENCENTCLOUD_REGION"],
+  SecretId=os.environ["TENCENTCLOUD_SECRET_ID"],
+  SecretKey=os.environ["TENCENTCLOUD_SECRET_KEY"],
+  Token=os.environ["TENCENTCLOUD_TOKEN"],
+  ))
+  
+  bucket = os.environ["COS_BUCKET"]
+  key    = os.environ["COS_KEY"]
+  jar    = os.environ["JAR_PATH"]
+  
+  client.upload_file(Bucket=bucket, Key=key, LocalFilePath=jar)
+  print(f"已上传 cos://{bucket}/{key}")
+  
+  url = client.get_presigned_url(Method="GET", Bucket=bucket, Key=key, Expired=1800)
+with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+  f.write(f"url={url}\n")
+  PY
+
+- name: 通过 RunCommand 部署
+  shell: bash
+  env:
+    PRESIGNED_URL: ${{ steps.cos.outputs.url }}
+  run: |
+    set -euo pipefail
+    
+    # 部署脚本：下载新 jar → 启新进程
+    read -r -d '' REMOTE_CMD <<EOF || true
+    set -e
+    mkdir -p "${APP_DIR}"
+    cd "${APP_DIR}"
+    
+    curl -fsSL -o "${APP_NAME}.new" "${PRESIGNED_URL}"
+    mv "${APP_NAME}.new" "${APP_NAME}"
+    
+    if [ -x "${DEPLOY_SCRIPT}" ]; then
+      bash "${DEPLOY_SCRIPT}"
+    fi
+    EOF
+    
+    # 直接传 JSON 数组，不用 --cli-unfold-argument
+    tccli lighthouse RunCommand \
+      --region "$TENCENTCLOUD_REGION" \
+      --InstanceIds "[\"$LIGHTHOUSE_INSTANCE_ID\"]" \
+      --Command "$REMOTE_CMD" \
+      --WorkingDirectory "/root" \
+      --Timeout 300
