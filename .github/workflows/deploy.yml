@@ -23,12 +23,6 @@ jobs:
       DEPLOY_SCRIPT: /opt/sinbot/backend/deploy.sh
 
     steps:
-      - name: Mask temp credentials
-        run: |
-          echo "::add-mask::$TENCENTCLOUD_SECRET_ID"
-          echo "::add-mask::$TENCENTCLOUD_SECRET_KEY"
-          echo "::add-mask::$TENCENTCLOUD_TOKEN"
-
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -72,10 +66,19 @@ jobs:
             echo "$STS_RESP" | jq .
             exit 1
           fi
+          
+          SID=$(echo "$STS_RESP" | jq -r '.Response.Credentials.TmpSecretId')
+          SKEY=$(echo "$STS_RESP" | jq -r '.Response.Credentials.TmpSecretKey')
+          STOKEN=$(echo "$STS_RESP" | jq -r '.Response.Credentials.Token')
+          
+          # 先 mask，再写入 GITHUB_ENV
+          echo "::add-mask::$SID"
+          echo "::add-mask::$SKEY"
+          echo "::add-mask::$STOKEN"
 
-          echo "TENCENTCLOUD_SECRET_ID=$(echo "$STS_RESP" | jq -r '.Response.Credentials.TmpSecretId')" >> "$GITHUB_ENV"
-          echo "TENCENTCLOUD_SECRET_KEY=$(echo "$STS_RESP" | jq -r '.Response.Credentials.TmpSecretKey')" >> "$GITHUB_ENV"
-          echo "TENCENTCLOUD_TOKEN=$(echo "$STS_RESP" | jq -r '.Response.Credentials.Token')" >> "$GITHUB_ENV"
+          echo "TENCENTCLOUD_SECRET_ID=$SID"       >> "$GITHUB_ENV"
+          echo "TENCENTCLOUD_SECRET_KEY=$SKEY"     >> "$GITHUB_ENV"
+          echo "TENCENTCLOUD_TOKEN=$STOKEN"        >> "$GITHUB_ENV"
 
       - name: 安装依赖
         run: python -m pip install --upgrade tccli cos-python-sdk-v5
