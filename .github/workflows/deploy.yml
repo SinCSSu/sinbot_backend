@@ -118,6 +118,7 @@ jobs:
           print(f"已上传 cos://{bucket}/{key}")
 
           url = client.get_presigned_url(Method="GET", Bucket=bucket, Key=key, Expired=1800)
+          url = url + "&x-cos-security-token=" + os.environ["TENCENTCLOUD_TOKEN"]
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"url={url}\n")
           PY
