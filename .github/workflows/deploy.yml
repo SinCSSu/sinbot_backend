@@ -23,6 +23,12 @@ jobs:
       DEPLOY_SCRIPT: /opt/sinbot/backend/deploy.sh
 
     steps:
+      - name: Mask temp credentials
+        run: |
+          echo "::add-mask::$TENCENTCLOUD_SECRET_ID"
+          echo "::add-mask::$TENCENTCLOUD_SECRET_KEY"
+          echo "::add-mask::$TENCENTCLOUD_TOKEN"
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -85,9 +91,9 @@ jobs:
             echo "未找到可执行 jar"; exit 1
           fi
           echo "上传文件: $JAR"
-
-          echo "COS_KEY=deploy/app-${{ github.sha }}.jar" >> "$GITHUB_ENV"
-          echo "JAR_PATH=$JAR" >> "$GITHUB_ENV"
+          
+          export COS_KEY="deploy/app-${{ github.sha }}.jar"
+          export JAR_PATH="$JAR"
 
           python - <<'PY'
           import os
