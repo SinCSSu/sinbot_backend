@@ -8,7 +8,8 @@ import top.sincs.sinbot.vo.team.TeamInfoVo;
 
 import java.util.List;
 
-public interface TeamService {
+@Deprecated
+public interface OldTeamService {
 
     /**
      * 创建团队。

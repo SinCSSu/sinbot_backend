@@ -9,7 +9,7 @@ import top.sincs.sinbot.constant.ErrorCode;
 import top.sincs.sinbot.dto.team.UpdateSettlementDTO;
 import top.sincs.sinbot.exception.BusinessException;
 import top.sincs.sinbot.security.SecurityUtils;
-import top.sincs.sinbot.service.TeamService;
+//import top.sincs.sinbot.service.TeamService;
 import top.sincs.sinbot.vo.team.TeamInfoVo;
 
 import java.util.List;
@@ -27,31 +27,31 @@ import java.util.List;
 @Slf4j
 public class AdminTeamController {
 
-    private final TeamService teamService;
-
-    @DeleteMapping("/deleteTeam")
-    public boolean deleteTeam(@NotBlank @RequestParam("teamId") String teamId) {
-        log.warn("删除团队{}!", teamId);
-        try {
-            teamService.deleteTeam(Long.parseLong(teamId));
-            return true;
-        } catch (NumberFormatException e) {
-            throw new BusinessException(ErrorCode.TEAM_ID_FORMAT_ERROR);
-        }
-    }
-
-    /** 管理端结算补写（DR-26）：不校验时间窗口，归档团队也能写 */
-    @PutMapping("/admin/updateSettlement")
-    public TeamInfoVo updateSettlementForAdmin(@RequestParam("teamId") Long teamId,
-                                               @Validated @RequestBody UpdateSettlementDTO dto) {
-        String operatorQq = SecurityUtils.requireOperatorQq();
-        log.info("管理端结算补写，团队{} 操作人{}", teamId, operatorQq);
-        return teamService.updateSettlementForAdmin(teamId, operatorQq, dto);
-    }
-
-    /** 管理端按群查全量团队（P-15）：不带任何时间过滤，含已归档 */
-    @GetMapping("/admin/getTeamsByGroupNumber")
-    public List<TeamInfoVo> getTeamsByGroupNumber(@NotBlank @RequestParam("groupNumber") String groupNumber) {
-        return teamService.getTeamsByGroup(groupNumber);
-    }
+//    private final TeamService teamService;
+//
+//    @DeleteMapping("/deleteTeam")
+//    public boolean deleteTeam(@NotBlank @RequestParam("teamId") String teamId) {
+//        log.warn("删除团队{}!", teamId);
+//        try {
+//            teamService.deleteTeam(Long.parseLong(teamId));
+//            return true;
+//        } catch (NumberFormatException e) {
+//            throw new BusinessException(ErrorCode.TEAM_ID_FORMAT_ERROR);
+//        }
+//    }
+//
+//    /** 管理端结算补写（DR-26）：不校验时间窗口，归档团队也能写 */
+//    @PutMapping("/admin/updateSettlement")
+//    public TeamInfoVo updateSettlementForAdmin(@RequestParam("teamId") Long teamId,
+//                                               @Validated @RequestBody UpdateSettlementDTO dto) {
+//        String operatorQq = SecurityUtils.requireOperatorQq();
+//        log.info("管理端结算补写，团队{} 操作人{}", teamId, operatorQq);
+//        return teamService.updateSettlementForAdmin(teamId, operatorQq, dto);
+//    }
+//
+//    /** 管理端按群查全量团队（P-15）：不带任何时间过滤，含已归档 */
+//    @GetMapping("/admin/getTeamsByGroupNumber")
+//    public List<TeamInfoVo> getTeamsByGroupNumber(@NotBlank @RequestParam("groupNumber") String groupNumber) {
+//        return teamService.getTeamsByGroup(groupNumber);
+//    }
 }

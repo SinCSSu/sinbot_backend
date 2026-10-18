@@ -14,7 +14,7 @@ import top.sincs.sinbot.entity.Team;
 import top.sincs.sinbot.exception.BusinessException;
 import top.sincs.sinbot.repository.MemberMapper;
 import top.sincs.sinbot.repository.TeamMapper;
-import top.sincs.sinbot.service.TeamService;
+import top.sincs.sinbot.service.OldTeamService;
 import top.sincs.sinbot.vo.member.MemberInfoVo;
 import top.sincs.sinbot.vo.team.TeamDetailVo;
 import top.sincs.sinbot.vo.team.TeamInfoVo;
@@ -24,7 +24,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-public class TeamServiceImpl implements TeamService {
+public class OldTeamServiceImpl implements OldTeamService {
 
     /** 结算窗口长度：打完后仍允许回填黑本人 / 团队工资的时长（DR-17） */
     private static final long SETTLEMENT_WINDOW_HOURS = 3L;

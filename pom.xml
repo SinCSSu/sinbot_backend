@@ -134,6 +134,11 @@
             <artifactId>nacos-api</artifactId>
             <version>${nacos.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.github.xkzhangsan</groupId>
+            <artifactId>xk-time</artifactId>
+            <version>3.2.4</version>
+        </dependency>
     </dependencies>
 
     <build>
