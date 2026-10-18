@@ -19,7 +19,7 @@ import java.util.List;
 @Getter
 @Setter
 @Component
-@ConfigurationProperties(prefix = "sinbot.robot")
+@ConfigurationProperties(prefix = "team-manager")
 public class RobotProperties {
 
     private List<String> apiKeys = List.of();
