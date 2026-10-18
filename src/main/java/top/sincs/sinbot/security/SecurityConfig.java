@@ -68,8 +68,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 登录接口必须匿名可访问
                         .requestMatchers("/auth/login").permitAll()
+                        // 健康检查探针：容器 / 负载均衡不带凭证访问，必须放行
+                        .requestMatchers("/actuator/health", "/actuator/health/**", "/livez", "/readyz").permitAll()
                         // Druid 监控页由它自己的 admin/admin 保护，生产环境请加 IP 白名单
-                        .requestMatchers("/druid/**", "/error", "/actuator/health").permitAll()
+                        .requestMatchers("/druid/**", "/error").permitAll()
                         .anyRequest().authenticated())
 
                 // 两条认证通道：先认机器人的 X-Api-Key，未命中才落到 Bearer token（DR-03）

@@ -28,8 +28,13 @@ public class TeamController {
     @PostMapping("/createTeam")
     public TeamInfoVo createTeam(@RequestHeader(HeaderConstant.GROUP_NUMBER) String groupNumber,
                                  @Validated @RequestBody CreateTeamDTO team) {
-        log.info("创建团队，来自群{}", groupNumber);
-        return teamService.createTeam(groupNumber, team);
+        // DR-08：操作人不入参也不由调用方自称，一律从当前身份取。
+        // 这条接口同时服务机器人与管理 App，因此不能写成 @RequestHeader(X-Operator-Qq)——
+        // App 不带这个头。两条链路已在 SecurityContext 里合流成 QQ 号，
+        // requireOperatorQq() 负责拒绝「机器人带了合法 key 却没声明谁在发指令」的请求。
+        String operatorQq = SecurityUtils.requireOperatorQq();
+        log.info("创建团队，来自群{} 操作人{}", groupNumber, operatorQq);
+        return teamService.createTeam(groupNumber, operatorQq, team);
     }
 
     @DeleteMapping("/deleteTeam")
@@ -69,10 +74,10 @@ public class TeamController {
      */
     @PutMapping("/updateSettlement")
     public TeamInfoVo updateSettlement(@NotBlank @RequestParam("groupNumber") String groupNumber,
-                                       @RequestHeader(HeaderConstant.OPERATOR_QQ) String operatorQq,
                                        @RequestParam("teamId") Long teamId,
                                        @Validated @RequestBody UpdateSettlementDTO dto) {
-        log.info("结算回填，群{} 团队{}", groupNumber, teamId);
+        String operatorQq = SecurityUtils.requireOperatorQq();
+        log.info("结算回填，群{} 团队{} 操作人{}", groupNumber, teamId, operatorQq);
         return teamService.updateSettlement(groupNumber, operatorQq, teamId, dto);
     }
 
@@ -80,9 +85,9 @@ public class TeamController {
     @PutMapping("/admin/updateSettlement")
     public TeamInfoVo updateSettlementForAdmin(@RequestParam("teamId") Long teamId,
                                                @Validated @RequestBody UpdateSettlementDTO dto) {
-        String username = SecurityUtils.getLoginUser().getUsername();
-        log.info("管理端结算补写，团队{} 操作人{}", teamId, username);
-        return teamService.updateSettlementForAdmin(teamId, username, dto);
+        String operatorQq = SecurityUtils.requireOperatorQq();
+        log.info("管理端结算补写，团队{} 操作人{}", teamId, operatorQq);
+        return teamService.updateSettlementForAdmin(teamId, operatorQq, dto);
     }
 
     /** 管理端按群查全量团队（P-15）：不带任何时间过滤，含已归档 */

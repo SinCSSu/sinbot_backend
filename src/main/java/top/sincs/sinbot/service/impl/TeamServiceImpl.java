@@ -14,8 +14,6 @@ import top.sincs.sinbot.entity.Team;
 import top.sincs.sinbot.exception.BusinessException;
 import top.sincs.sinbot.repository.MemberMapper;
 import top.sincs.sinbot.repository.TeamMapper;
-import top.sincs.sinbot.security.LoginUser;
-import top.sincs.sinbot.security.SecurityUtils;
 import top.sincs.sinbot.service.TeamService;
 import top.sincs.sinbot.vo.member.MemberInfoVo;
 import top.sincs.sinbot.vo.team.TeamDetailVo;
@@ -42,22 +40,20 @@ public class TeamServiceImpl implements TeamService {
     private final MemberToMemberInfoVoConverter memberToMemberInfoVoConverter;
 
     @Override
-    public TeamInfoVo createTeam(String groupNumber, CreateTeamDTO team) {
+    public TeamInfoVo createTeam(String groupNumber, String operatorQq, CreateTeamDTO team) {
 
-        // DR-08：操作人不由调用方自称。机器人 X-Operator-Qq 与 App token 的 username
-        // 值域一致（都是 QQ 号），在这里合流，业务侧无需区分来源。
-        LoginUser operator = SecurityUtils.getLoginUserOrNull();
-        String operatorId = operator == null ? null : operator.getUsername();
-
+        // DR-08：操作人不由调用方自称，由 controller 按来源解析后传入——
+        // 机器人取 X-Operator-Qq，App 取 token 里的 username，值域一致（都是 QQ 号）。
+        // 调用方已保证非空：created_by 是业务字段（DR-06），不能落成一个「没人开的团」。
         Team teamInfo = new Team();
         teamInfo.setTeamName(team.getTeamName());
         teamInfo.setComment(team.getComment());
-        teamInfo.setCreatedBy(operatorId);
+        teamInfo.setCreatedBy(operatorQq);
         // DR-19：team_name 与 dungeon 各写各列，服务端不做复制或推导
         teamInfo.setDungeon(team.getDungeon());
         teamInfo.setGroupNumber(groupNumber);
         teamInfo.setStartTime(team.getStartTime());
-        teamInfo.setLastUpdateBy(operatorId);
+        teamInfo.setLastUpdateBy(operatorQq);
         teamInfo.setLimitMethod(team.getLimitMethod());
         teamInfo.setOvertimeTime(team.getStartTime().plusHours(SETTLEMENT_WINDOW_HOURS));
 
