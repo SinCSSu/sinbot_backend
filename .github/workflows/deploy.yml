@@ -90,7 +90,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          JAR=$(find target -maxdepth 1 -name '*.jar' ! -name '*.original' | head -n 1)
+          # 多模块结构下根项目是 packaging=pom，可执行 jar 由 sinbot_stater 产出
+          JAR=$(find sinbot_stater/target -maxdepth 1 -name '*.jar' ! -name '*.original' | head -n 1)
           if [ -z "$JAR" ]; then
             echo "未找到可执行 jar"; exit 1
           fi

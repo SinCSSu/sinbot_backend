@@ -11,6 +11,7 @@
     <groupId>top.sincs</groupId>
     <artifactId>sinbot</artifactId>
     <version>0.0.1-SNAPSHOT</version>
+    <packaging>pom</packaging>
     <name/>
     <description/>
     <url/>
@@ -20,6 +21,12 @@
     <developers>
         <developer/>
     </developers>
+    <modules>
+        <module>sinbot_bot</module>
+        <module>sinbot_common</module>
+        <module>sinbot_stater</module>
+        <module>sinbot_app</module>
+    </modules>
     <scm>
         <connection/>
         <developerConnection/>
@@ -130,11 +137,17 @@
     </dependencies>
 
     <build>
+        <!-- 只有 sinbot_stater 有 main class，repackage 只能在它身上执行；
+             这里仅做版本与配置托管，子模块按需显式声明。 -->
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                </plugin>
+            </plugins>
+        </pluginManagement>
         <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
