@@ -1,5 +1,6 @@
 package top.sincs.sinbot.vo.member;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -12,15 +13,20 @@ import lombok.Setter;
 @Setter
 public class MemberInfoVo {
 
+    @JsonProperty("member_id")
     private Long memberId;
 
+    @JsonProperty("team_id")
     private Long teamId;
 
+    @JsonProperty("member_qq_number")
     private String memberQqNumber;
 
+    @JsonProperty("member_name")
     private String memberName;
 
     private Long specialization;
 
+    @JsonProperty("sub_spec")
     private Long subSpec;
 }
