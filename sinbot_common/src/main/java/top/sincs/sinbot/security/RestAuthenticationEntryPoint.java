@@ -45,6 +45,14 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
             writeResult(response, ErrorCode.ROBOT_API_KEY_INVALID);
             return;
         }
+        if (request.getAttribute(SecurityAttrConstant.ATTR_MISSING_GROUP_NUMBER) != null) {
+            writeResult(response, ErrorCode.GROUP_NUMBER_MISSING);
+            return;
+        }
+        if (request.getAttribute(SecurityAttrConstant.ATTR_MISSING_OPERATOR_QQ) != null) {
+            writeResult(response, ErrorCode.OPERATOR_QQ_MISSING);
+            return;
+        }
         Object invalid = request.getAttribute(SecurityAttrConstant.ATTR_INVALID_TOKEN);
         writeResult(response, invalid != null ? ErrorCode.TOKEN_INVALID : ErrorCode.UNAUTHORIZED);
     }

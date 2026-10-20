@@ -139,6 +139,11 @@
             <artifactId>xk-time</artifactId>
             <version>3.2.4</version>
         </dependency>
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-core</artifactId>
+            <version>5.8.43</version>
+        </dependency>
     </dependencies>
 
     <build>

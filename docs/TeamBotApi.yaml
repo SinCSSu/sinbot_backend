@@ -1,8 +1,28 @@
 openapi: 3.1.0
 info:
   title: 团队OpenAPI-机器人侧
-  description: 提供给机器人侧使用的api
-  version: 1.0.0
+  description: |
+    提供给 QQ 机器人使用的接口。
+
+    ## 认证与上下文
+    三个请求头**全部必传**：
+    - `X-Api-Key`：机器人凭据，命中即走机器人认证通道
+    - `X-Group-Number`：当前群号，业务分区键（DR-04）
+    - `X-Operator-Qq`：群内实际操作人 QQ（DR-06 / DR-08）
+
+    群号与操作人由认证通道校验后写入身份上下文，**业务接口不再接收这两个参数**（DR-04 / DR-08）。
+    缺头分别返回 `10009` / `10011` / `10010`。
+
+    ## 通用约定
+    - 所有接口 HTTP 状态码固定为 `200`，成功与否看响应体 `code`，`0` 为成功
+    - 时间格式统一为 `yyyy-MM-dd HH:mm:ss`（GMT+8）
+    - 「团队编号」是**列表序号**（DR-15）：该群招募中团队按开始时间升序的 1-based 序号
+
+    ## 指令文本
+    `/team/createTeam`、`/team/getTeamDetail`、`/team/removeTeam` 的请求体是
+    `text/plain` 的**原始指令参数文本**（由机器人把群消息里的参数部分原样转发），不是一个 JSON 对象。
+    `content-type` 请使用 `text/plain;charset=UTF-8`。
+  version: 2.0.0
 servers:
   - url: http://localhost:18080
     description: 通用环境
@@ -12,6 +32,16 @@ paths:
       tags: [ team ]
       summary: 创建团队
       operationId: createTeam
+      description: |
+        指令参数文本，空格分隔，2~4 段：
+
+        - 时间与团名两段**顺序可互换**：第 1 段能解析成时间时，第 1 段是开团时间、第 2 段是团名；否则反之
+        - `无限制` 是独立开关：出现则 `limit_method = 0`，不出现为 `1`
+        - 摘掉开关与时间、团名后，剩余段落按空格拼接写入 `comment`
+        - `dungeon` 一期复用团名填充（DR-19 修订版），机器人不需要传
+        - 开团时间必须**晚于当前时间**，解析出的时间已过（如「昨天八点」「8点」）一律 `20013` 拒绝
+
+        示例：`今晚八点 yx`、`yx 今晚八点 有事别报`、`今晚八点 yx 有事别报 无限制`
       parameters:
         - $ref: '#/components/parameters/groupNumber'
         - $ref: '#/components/parameters/operator'
@@ -20,9 +50,19 @@ paths:
       requestBody:
         required: true
         content:
-          application/json:
+          text/plain:
             schema:
-              $ref: '#/components/schemas/CreateTeamRequest'
+              type: string
+            examples:
+              timeFirst:
+                summary: 时间在前
+                value: 今晚八点 yx
+              nameFirst:
+                summary: 团名在前，带备注
+                value: yx 今晚八点 有事别报
+              unlimited:
+                summary: 不限人数
+                value: 今晚八点 yx 有事别报 无限制
       responses:
         '200':
           description: 服务器正常返回
@@ -36,18 +76,149 @@ paths:
                       data:
                         $ref: '#/components/schemas/TeamInfoVo'
 
+  /team/getAvailableTeamsByGroupNumber:
+    post:
+      tags: [ team ]
+      summary: 查询招募中的团队（「查看当前团队」）
+      operationId: getAvailableTeamsByGroupNumber
+      description: 只返回本群 `start_time > 当前时间` 的团队（DR-13）。无请求体。
+      parameters:
+        - $ref: '#/components/parameters/groupNumber'
+        - $ref: '#/components/parameters/operator'
+      security:
+        - apiKeyAuth: [ ]
+      responses:
+        '200':
+          description: 服务器正常返回
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/TeamInfoVo'
 
+  /team/getHistoryTeamsByGroupNumber:
+    post:
+      tags: [ team ]
+      summary: 查询结算窗口内的团队（「查询历史团队」）
+      operationId: getHistoryTeamsByGroupNumber
+      description: 只返回本群 `start_time ≤ 当前时间 < overtime_time` 的团队（DR-16）。无请求体。
+      parameters:
+        - $ref: '#/components/parameters/groupNumber'
+        - $ref: '#/components/parameters/operator'
+      security:
+        - apiKeyAuth: [ ]
+      responses:
+        '200':
+          description: 服务器正常返回
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/TeamInfoVo'
 
+  /team/getTeamDetail:
+    post:
+      tags: [ team ]
+      summary: 团队详情 + 报名名单（「查看团队 团队编号」）
+      operationId: getTeamDetail
+      description: |
+        指令参数文本，必传，取值三选一：
 
+        - 纯数字 → 按**团队编号**（招募中列表的 1-based 序号）定位，越界返回 `20014`
+        - 其他文本 → 按**团名**精确匹配，查不到返回 `20015`，同名多个返回 `20016`
+        - 空 body 不被接受（框架层返回 `10000`）
 
+        只在本群、`start_time > 当前时间` 的团队中解析（DR-16）。
+      parameters:
+        - $ref: '#/components/parameters/groupNumber'
+        - $ref: '#/components/parameters/operator'
+      security:
+        - apiKeyAuth: [ ]
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema:
+              type: string
+            examples:
+              byNo:
+                summary: 按团队编号
+                value: '1'
+              byName:
+                summary: 按团名
+                value: yx
+      responses:
+        '200':
+          description: 服务器正常返回
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TeamDetailVo'
 
+  /team/removeTeam:
+    post:
+      tags: [ team ]
+      summary: 解散团队（逻辑删除）
+      operationId: removeTeam
+      description: |
+        请求体的取值规则与 `/team/getTeamDetail` 完全一致（团队编号 / 团名），
+        也只在本群、招募中的团队中解析。团队与其报名记录一并逻辑删除；
+        解散后该团不再出现在任何群内列表，编号随之重排（DR-15）。
+      parameters:
+        - $ref: '#/components/parameters/groupNumber'
+        - $ref: '#/components/parameters/operator'
+      security:
+        - apiKeyAuth: [ ]
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema:
+              type: string
+            examples:
+              byNo:
+                summary: 按团队编号
+                value: '1'
+              byName:
+                summary: 按团名
+                value: yx
+      responses:
+        '200':
+          description: 服务器正常返回
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: boolean
+                        description: 正常返回即 `true` 表示解散成功；任何失败都以业务码返回，不会出现 `false`
 components:
   parameters:
     groupNumber:
       name: X-Group-Number
       in: header
       required: true
-      description: 来源qq群号
+      description: 来源 QQ 群号，业务分区键（DR-04）
       schema:
         type: string
         pattern: '^-?\d+$'
@@ -55,13 +226,13 @@ components:
       name: X-Operator-Qq
       in: header
       required: true
-      description: 发送指令的人的qq号
+      description: 群内实际操作人 QQ 号，落 `created_by` / `last_update_by`（DR-06 / DR-08）
       schema:
         type: string
         pattern: '^-?\d+$'
   securitySchemes:
     apiKeyAuth:
-      name: X-API-Key
+      name: X-Api-Key
       type: apiKey
       in: header
   schemas:
@@ -76,42 +247,30 @@ components:
         message:
           type: string
           description: 提示信息
-          example: ok
+          example: 操作成功
         data:
           description: 业务数据，具体结构由各接口决定
           nullable: true
+        timestamp:
+          type: integer
+          format: int64
+          description: 服务端响应时间戳（毫秒）
+          example: 1760918400000
     ErrorResponse:
       type: object
       required: [ code, message ]
       properties:
         code:
           type: integer
-          example: 40001
+          example: 20013
         message:
           type: string
-          example: 参数错误
+          example: 请输入正确的参数
         data:
           type: "null"
-
-    #----------------------请求体-------------------------
-
-    CreateTeamRequest:
-      type: object
-      required: [ team_name,dungeon,start_time ]
-      properties:
-        team_name:
-          type: string
-        dungeon:
-          type: string
-        comment:
-          type: string
-        start_time:
-          type: string
-          format: time
-          example: "2026-09-29 09:00:00"
-        limit_method:
-          type: string
-          pattern: '^-?\d+$'
+        timestamp:
+          type: integer
+          format: int64
 
     #----------------------响应体-------------------------
 
@@ -128,24 +287,63 @@ components:
           pattern: '^-?\d+$'
         dungeon:
           type: string
+          description: 一期与 `team_name` 相同（DR-19 修订版）
         comment:
           type: string
         start_time:
           type: string
-          format: time
-          example: "2026-09-29 09:00:00"
+          description: 格式 `yyyy-MM-dd HH:mm:ss`（GMT+8）
+          example: "2026-10-20 20:00:00"
         overtime_time:
           type: string
-          format: time
-          example: "2026-09-29 09:00:00"
+          description: 结算窗口结束时间 = `start_time` + 3 小时（DR-17）
+          example: "2026-10-20 23:00:00"
         limit_method:
           type: string
+          description: 0 = 无限制，1 = 限制；一期不参与业务逻辑（DR-20）
           pattern: '^-?\d+$'
         locker:
           type: string
+          description: 黑本人，结算窗口内回填（DR-14）
         salary:
+          type: integer
+          description: 人均工资，单位金，整数（DR-14）
+        create_by:
           type: string
+          description: 开团人 QQ 号（DR-06 / DR-08）
           pattern: '^-?\d+$'
-        createdBy:
+
+    TeamDetailVo:
+      allOf:
+        - $ref: '#/components/schemas/TeamInfoVo'
+        - type: object
+          properties:
+            members:
+              type: array
+              description: 未退团的报名记录
+              items:
+                $ref: '#/components/schemas/MemberInfoVo'
+
+    MemberInfoVo:
+      type: object
+      properties:
+        memberId:
+          type: integer
+          format: int64
+        teamId:
+          type: integer
+          format: int64
+        memberQqNumber:
           type: string
-          pattern: '^-?\d+$'
+          description: 报名人 QQ 号（DR-18）
+        memberName:
+          type: string
+          description: 游戏 ID，成员的主标识（DR-10）
+        specialization:
+          type: integer
+          format: int64
+          description: 主心法 id
+        subSpec:
+          type: integer
+          format: int64
+          description: 副心法 id

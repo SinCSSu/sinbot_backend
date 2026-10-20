@@ -8,7 +8,7 @@ package top.sincs.sinbot.constant;
  * 写入的 request 属性名才能区分错误码。若这些常量留在各自的 Filter 上，
  * 公共层就必须反向依赖 bot / app 模块，形成依赖倒置——因此统一收敛到这里。</p>
  *
- * <p>三个常量的值必须与两侧 Filter 写入/读取的完全一致，改动时请一并核对。</p>
+ * <p>这些常量的值必须与两侧 Filter 写入/读取的完全一致，改动时请一并核对。</p>
  */
 public final class SecurityAttrConstant {
 
@@ -20,6 +20,12 @@ public final class SecurityAttrConstant {
 
     /** 携带了 Bearer token 但已失效 / 已登出时写入的 request 属性名，供 401 出口报 10008 */
     public static final String ATTR_INVALID_TOKEN = "sinbot.invalid-token";
+
+    /** 机器人请求缺 {@code X-Group-Number} 时写入的 request 属性名，供 401 出口报 10011 */
+    public static final String ATTR_MISSING_GROUP_NUMBER = "sinbot.missing-group-number";
+
+    /** 机器人请求缺 {@code X-Operator-Qq} 时写入的 request 属性名，供 401 出口报 10010 */
+    public static final String ATTR_MISSING_OPERATOR_QQ = "sinbot.missing-operator-qq";
 
     /** 机器人身份的角色标识 */
     public static final String ROLE_ROBOT = "ROLE_ROBOT";

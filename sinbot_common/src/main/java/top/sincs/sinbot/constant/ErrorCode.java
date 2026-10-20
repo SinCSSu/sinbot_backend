@@ -31,6 +31,7 @@ public enum ErrorCode {
     TOKEN_INVALID(10008, "登录状态已失效，请重新登录"),
     ROBOT_API_KEY_INVALID(10009, "机器人凭据无效"),
     OPERATOR_QQ_MISSING(10010, "缺少操作人标识，请携带 X-Operator-Qq 请求头"),
+    GROUP_NUMBER_MISSING(10011, "缺少群号标识，请携带 X-Group-Number 请求头"),
 
     /* ---------------- 业务错误 20xxx ---------------- */
     BIZ_ERROR(20000, "业务处理失败"),
@@ -47,6 +48,9 @@ public enum ErrorCode {
     SETTLEMENT_CONTENT_EMPTY(20011, "locker 与 salary 不允许同时为空"),
     TIME_FORMAT_ERROR(20012, "格式化输入时间错误"),
     CREATE_TEAM_PARAM_ERROR(20013, "请输入正确的参数"),
+    TEAM_NUMBER_OUT_OF_RANGE(20014,"输入的团队序号不存在"),
+    NO_AVAILABLE_TEAM(20015,"当前无在开团队"),
+    MULTI_AVAILABLE_TEAM(20016,"当前有多个在开团队，请指定"),
 
     /* ---------------- 系统错误 50xxx ---------------- */
     SYSTEM_ERROR(50000, "系统繁忙，请稍后重试"),

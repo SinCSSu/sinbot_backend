@@ -23,6 +23,15 @@ public class LoginUser implements Serializable {
 
     private String nickname;
 
+    /**
+     * 当前请求所属群的群号，业务分区键（DR-04）。
+     *
+     * <p>由机器人认证通道从 {@code X-Group-Number} 解析后填入，仅运行时使用，不写入 Redis；
+     * App 通道不下发该头，读取方通过 {@code SecurityUtils.requireGroupNumber()} 取值。</p>
+     */
+    @JsonIgnore
+    private String groupNumber;
+
     /** 形如 ROLE_ADMIN，直接作为 Spring Security 的 authority */
     private List<String> roles;
 
