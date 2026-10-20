@@ -13,6 +13,8 @@ import java.util.List;
 @Setter
 public class TeamDetailVo extends TeamInfoVo {
 
-    /** 未退团的报名记录，按报名先后升序 */
+    /**
+     * 未退团的报名记录，按报名先后升序
+     */
     private List<MemberInfoVo> members;
 }

@@ -41,4 +41,10 @@ public class TeamInfoVo {
 
     @JsonProperty(value = "create_by")
     private String createdBy;
+
+    /*
+    当前团队在 当前可获取的团队中的顺序
+     */
+    @JsonProperty("team_no")
+    private String teamNo;
 }
