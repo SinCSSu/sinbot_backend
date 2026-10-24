@@ -1,0 +1,46 @@
+# SinBot Backend 运行栈（仓库根，本机构建 / 单机验证）
+#
+#   cp .env.deploy.example .env.deploy    # 填 NACOS_* 引导参数
+#   docker compose up -d --build
+#   docker compose logs -f sinbot-backend
+#
+# 面板 webhook 部署用的是 sh/sinbot_backend/docker-compose.yml（结构相同，去掉 build、
+# 镜像指向镜像仓库），由 sh/scripts/deploy.sh 调起；改服务定义时两份要对齐。
+
+name: sinbot-backend
+
+services:
+  sinbot-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # 本地构建出的标签；CI 部署时由覆盖文件把 image 钉成镜像仓库里的 sha 标签
+    image: ${SINBOT_BACKEND_IMAGE:-sinbot-backend:latest}
+    container_name: sinbot-backend
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+    # 启动期唯一需要的本地配置：NACOS_* 与 TZ，业务配置全部来自 Nacos
+    env_file:
+      - .env.deploy
+
+    ports:
+      - "${BACKEND_PORT:-18080}:18080"
+
+    # Nacos 跑在宿主机时，用 host.docker.internal 访问
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    # readiness 组含 db + redis，冷启动要等 Nacos 拉配置与数据源初始化，给足 start_period
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:18080/livez"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

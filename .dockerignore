@@ -1,0 +1,31 @@
+# 版本控制与 CI
+.git
+.gitignore
+.github
+
+# 构建产物：镜像内会重新编译，且工作区里混有历史 *.class，必须排除
+**/target/
+**/*.class
+**/*.jar
+
+# 本地配置与敏感信息：运行时由 env_file 注入，禁止进镜像
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.deploy.example
+!**/.env.deploy.example
+
+# 部署编排：镜像内不需要
+Dockerfile
+docker-compose.yml
+.dockerignore
+sh/
+docs/
+
+# 编辑器 / 系统杂项
+.idea
+.vscode
+.codebuddy
+.DS_Store
+Thumbs.db

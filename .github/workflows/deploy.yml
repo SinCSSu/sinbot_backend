@@ -1,178 +1,133 @@
-name: Build and Deploy to Lighthouse
+name: Build & Deploy
 
+# 合并到 master 后 GitHub 会产生一次 push 事件，监听 push 即可覆盖「合并时触发」。
+# 保留手动触发用于回滚/补发。
 on:
   push:
-    branches: [ master ]
+    branches:
+      - master
+    # 纯文档提交不重新构建镜像
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+  workflow_dispatch:
 
+# 同一分支只保留最新一次构建，避免连续合并时旧镜像覆盖新镜像
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+# 推送 GHCR 需要 packages:write；GITHUB_TOKEN 由 Actions 自动注入，无需手工配置
 permissions:
-  id-token: write
   contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
 
 jobs:
-  build-and-deploy:
+  build-push:
+    name: Build → Push GHCR → Webhook
     runs-on: ubuntu-latest
-
-    env:
-      TENCENTCLOUD_REGION: ${{ secrets.TENCENTCLOUD_REGION }}
-      TENCENTCLOUD_COS_REGION: ${{ secrets.TENCENTCLOUD_COS_REGION }}
-      ROLE_ARN: ${{ secrets.TENCENTCLOUD_ROLE_ARN }}
-      OIDC_PROVIDER_ID: ${{ secrets.TENCENTCLOUD_OIDC_PROVIDER_ID }}
-      LIGHTHOUSE_INSTANCE_ID: ${{ secrets.LIGHTHOUSE_INSTANCE_ID }}
-      COS_BUCKET: ${{ secrets.COS_BUCKET }}
-      APP_DIR: /opt/sinbot/backend/releases
-      APP_NAME: sinbot_backend.jar
-      DEPLOY_SCRIPT: /opt/sinbot/backend/deploy.sh
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK
-        uses: actions/setup-java@v4
+      - name: Prepare image metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA_SHORT="$(echo "${GITHUB_SHA}" | cut -c1-7)"
+          DATE_TAG="$(date -u +%Y%m%d-%H%M%S)"
+          # GHCR 镜像名必须全小写，而 github.repository 可能含大写
+          REPO_LC="$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          {
+            echo "image=${REGISTRY}/${REPO_LC}"
+            echo "sha=${SHA_SHORT}"
+            echo "version=${DATE_TAG}-${SHA_SHORT}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
         with:
-          distribution: temurin
-          java-version: '21'
-          cache: maven
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Maven 打包
-        run: mvn -B clean package -DskipTests
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          # 部署机为 x86 服务器；若是 ARM（如树莓派/NAS）改成 linux/arm64
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:latest
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha }}
+          # 标签写进镜像，便于线上追溯来源 commit
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          # 缓存 Maven 依赖层与运行层，二次构建基本只剩 jar 那一层变化
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: 获取腾讯云临时凭证（OIDC）
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          ID_TOKEN=$(curl -sS \
-            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.tencentcloudapi.com" \
-            | jq -r '.value')
-
-          if [ -z "$ID_TOKEN" ] || [ "$ID_TOKEN" = "null" ]; then
-            echo "获取 GitHub OIDC token 失败"; exit 1
-          fi
-
-          STS_RESP=$(curl -sS -X POST "https://sts.tencentcloudapi.com/" \
-          --data-urlencode "Action=AssumeRoleWithWebIdentity" \
-          --data-urlencode "Version=2018-08-13" \
-          --data-urlencode "Region=$TENCENTCLOUD_REGION" \
-          --data-urlencode "Timestamp=$(date -u +%s)" \
-          --data-urlencode "Nonce=$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')" \
-          --data-urlencode "RoleArn=$ROLE_ARN" \
-          --data-urlencode "WebIdentityToken=$ID_TOKEN" \
-          --data-urlencode "ProviderId=$OIDC_PROVIDER_ID" \
-          --data-urlencode "RoleSessionName=gh-${{ github.run_id }}" \
-          --data-urlencode "DurationSeconds=3600")
-
-          if echo "$STS_RESP" | jq -e '.Response.Error' >/dev/null; then
-            echo "$STS_RESP" | jq .
-            exit 1
-          fi
-          
-          SID=$(echo "$STS_RESP" | jq -r '.Response.Credentials.TmpSecretId')
-          SKEY=$(echo "$STS_RESP" | jq -r '.Response.Credentials.TmpSecretKey')
-          STOKEN=$(echo "$STS_RESP" | jq -r '.Response.Credentials.Token')
-          
-          # 先 mask，再写入 GITHUB_ENV
-          echo "::add-mask::$SID"
-          echo "::add-mask::$SKEY"
-          echo "::add-mask::$STOKEN"
-
-          echo "TENCENTCLOUD_SECRET_ID=$SID"       >> "$GITHUB_ENV"
-          echo "TENCENTCLOUD_SECRET_KEY=$SKEY"     >> "$GITHUB_ENV"
-          echo "TENCENTCLOUD_TOKEN=$STOKEN"        >> "$GITHUB_ENV"
-
-      - name: 安装依赖
-        run: python -m pip install --upgrade tccli cos-python-sdk-v5
-
-      - name: 上传 jar 到 COS 并生成预签名 URL
-        id: cos
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          # 多模块结构下根项目是 packaging=pom，可执行 jar 由 sinbot_stater 产出
-          JAR=$(find sinbot_stater/target -maxdepth 1 -name '*.jar' ! -name '*.original' | head -n 1)
-          if [ -z "$JAR" ]; then
-            echo "未找到可执行 jar"; exit 1
-          fi
-          echo "上传文件: $JAR"
-          
-          export COS_KEY="deploy/app-${{ github.sha }}.jar"
-          export JAR_PATH="$JAR"
-
-          python - <<'PY'
-          import os
-          from qcloud_cos import CosConfig, CosS3Client
-
-          client = CosS3Client(CosConfig(
-              Region=os.environ["TENCENTCLOUD_COS_REGION"],
-              SecretId=os.environ["TENCENTCLOUD_SECRET_ID"],
-              SecretKey=os.environ["TENCENTCLOUD_SECRET_KEY"],
-              Token=os.environ["TENCENTCLOUD_TOKEN"],
-          ))
-
-          bucket = os.environ["COS_BUCKET"]
-          key    = os.environ["COS_KEY"]
-          jar    = os.environ["JAR_PATH"]
-
-          client.upload_file(Bucket=bucket, Key=key, LocalFilePath=jar)
-          print(f"已上传 cos://{bucket}/{key}")
-
-          url = client.get_presigned_url(Method="GET", Bucket=bucket, Key=key, Expired=1800)
-          url = url + "&x-cos-security-token=" + os.environ["TENCENTCLOUD_TOKEN"]
-          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-              f.write(f"url={url}\n")
-          PY
-
-      - name: 通过 TAT RunCommand 部署
+      # 构建完成后把本次镜像地址交给部署机上既有的 webhook 容器，由它 pull + 重建容器。
+      # 复用既有容器，不新增服务：URL 走原反代/端口，只是 hook 路径不同。
+      # 部署端需能访问 ghcr.io（私有包需 PAT，见 sh/env.fragment 说明）。
+      - name: Trigger deploy via webhook
+        if: success()
         shell: bash
         env:
-          PRESIGNED_URL: ${{ steps.cos.outputs.url }}
+          # 用 sha 标签而非 latest：部署的镜像与本次 commit 严格对应，回滚只需改 tag
+          IMAGE: "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha }}"
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+          WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
         run: |
           set -euo pipefail
+          if [ -z "${WEBHOOK_URL}" ]; then
+            echo "未配置 DEPLOY_WEBHOOK_URL，跳过部署"; exit 0
+          fi
+          # 载荷形状沿用 push 事件：hooks.json 里的 HMAC + ref + head_commit.id 规则才能命中
+          PAYLOAD=$(jq -n \
+            --arg image "$IMAGE" \
+            --arg ref "$GITHUB_REF" \
+            --arg sha "$GITHUB_SHA" \
+            --arg version "${{ steps.meta.outputs.version }}" \
+            --arg actor "$GITHUB_ACTOR" \
+            '{ref: $ref, after: $sha, head_commit: {id: $sha}, image: $image, version: $version, actor: $actor}')
+          SIGNATURE=$(printf '%s' "$PAYLOAD" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | awk '{print $2}')
+          curl -fsS --max-time 30 -X POST \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: push" \
+            -H "X-Hub-Signature-256: sha256=${SIGNATURE}" \
+            -d "$PAYLOAD" \
+            "$WEBHOOK_URL"
+          echo "已通知部署机：$IMAGE"
 
-          REMOTE_CMD="set -e
-          mkdir -p ${APP_DIR}
-          cd ${APP_DIR}
-          curl -fsSL -o ${APP_NAME}.new '${PRESIGNED_URL}'
-          mv ${APP_NAME}.new ${APP_NAME}
-          if [ -x ${DEPLOY_SCRIPT} ]; then bash ${DEPLOY_SCRIPT}; fi"
-
-          CMD_CONTENT=$(printf '%s' "$REMOTE_CMD" | base64 -w0)
-
-          INVOCATION_ID=$(tccli tat RunCommand \
-          --region "$TENCENTCLOUD_REGION" \
-          --InstanceIds "[\"$LIGHTHOUSE_INSTANCE_ID\"]" \
-          --Content "$CMD_CONTENT" \
-          --WorkingDirectory "/root" \
-          --Timeout 300 \
-          | jq -r '.InvocationId')
-        
-          echo "InvocationId: $INVOCATION_ID"
-          
-          for i in $(seq 1 60); do
-          RESP=$(tccli tat DescribeInvocations \
-          --region "$TENCENTCLOUD_REGION" \
-          --InvocationIds "[\"$INVOCATION_ID\"]")
-        
-          STATUS=$(echo "$RESP" | jq -r '.InvocationSet[0].InvocationStatus')
-          echo "第 $i 次查询，状态: $STATUS"
-        
-          case "$STATUS" in
-          SUCCESS)
-          echo "部署成功"
-          exit 0
-          ;;
-          FAILED|TIMEOUT|PARTIAL_FAILED)
-          echo "$RESP" | jq .
-          # 拿详情（含 stdout/stderr）
-          tccli tat DescribeInvocationTasks \
-          --region "$TENCENTCLOUD_REGION" \
-          --InvocationTaskIds "[\"$(echo "$RESP" | jq -r '.InvocationSet[0].InvocationTaskBasicInfoSet[0].InvocationTaskId')\"]" \
-          --HideOutput false | jq .
-          exit 1
-          ;;
-          esac
-          sleep 5
-          done
-          echo "等待超时"; exit 1
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### 镜像构建结果"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "| --- | --- |"
+            echo "| 状态 | ${{ job.status }} |"
+            echo "| 镜像 | \`${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}\` |"
+            echo "| 部署镜像 | \`${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha }}\` |"
+            echo "| Commit | \`${{ github.sha }}\` |"
+            echo "| 触发者 | @${{ github.actor }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
